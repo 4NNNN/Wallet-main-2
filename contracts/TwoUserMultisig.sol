@@ -19,7 +19,6 @@ import "./interfaces/IModuleManager.sol";
 contract TwoUserMultisig is IAccount,IERC1271,Multicall {
     // to get transaction hash
     using TransactionHelper for Transaction;
-    address public owner;
     address public moduleManager;
     // state variables for account owners
     address public owner1;
