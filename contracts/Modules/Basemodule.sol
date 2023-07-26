@@ -17,27 +17,27 @@ abstract contract BaseModule {
     function sender() internal view returns (address) {
         return msg.sender;
     }
-
+  //params - (address[] memory _guardians, uint256 _threshold, bytes32 _guardianHash)
     function walletInit(bytes calldata data) external {
         address _sender = sender();
-        if (!inited(_sender)) {
-            if (!IModuleManager(_sender).isAuthorizedModule(address(this))) {
-                revert("not authorized module");
-            }
+        // if (!inited(_sender)) {
+        //     if (!IModuleManager(_sender).isAuthorizedModule(address(this))) {
+        //         revert("not authorized module");
+        //     }
             _init(data);
             emit ModuleInit(_sender);
-        }
+        //}
     }
 
     function walletDeInit() external {
         address _sender = sender();
-        if (inited(_sender)) {
-            if (IModuleManager(_sender).isAuthorizedModule(address(this))) {
-                revert("authorized module");
-            }
+        // if (inited(_sender)) {
+        //     if (IModuleManager(_sender).isAuthorizedModule(address(this))) {
+        //         revert("authorized module");
+        //     }
             _deInit();
             emit ModuleDeInit(_sender);
-        }
+       // }
     }
 
 }

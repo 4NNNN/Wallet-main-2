@@ -1,32 +1,35 @@
-// SPDX-License-Identifier: GPL-3.0
+ // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.16;
 
-import "contracts/interfaces/ISocialRecovery.sol";//has to be there
+import "contracts/interfaces/ISCRmod.sol";//has to be there
 import "./Basemodule.sol";//imp solved
 import "./lib/AddressLinkedList.sol";//storage and mapping contracts/Modules/lib/AddressLinkedList.sol
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "contracts/interfaces/IModuleManager.sol";//4timescontracts/interfaces/IMultisig.sol
+import "contracts/interfaces/IAccountRegistry.sol";
 import "../TwoUserMultisig.sol";
 
-contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
+contract SocialRecovery is ISocialRecoveryModule,BaseModule {
     using AddressLinkedList for mapping(address => address);
-
-    string public constant NAME = "Soulwallet Social Recovery Module";
+    bytes4 public moduleIdentifier = bytes4(keccak256("SWAP_MODULE"));
+    string public constant NAME = "Social Recovery Module";
     string public constant VERSION = "0.0.1";
-
+    address public moduleManager;
+    uint256 public moduleId;
     // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant _DOMAIN_SEPARATOR_TYPEHASH =
         0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
 
-    // keccak256("SocialRecovery(address wallet,address[] newOwners,uint256 nonce)");
+    // keccak256("SocialRecovery(address wallet,address[] newOwners,uint256 nonce)");// 0x045f8cbcfd5eb3a66e652ba12024c17025c083aa5c36dfb7978f9ad247d47020
     bytes32 private constant _SOCIAL_RECOVERY_TYPEHASH =
-        0x333ef7ecc7b8a82065578df0879cefc36c32344d49afdf1e0370a60babe64feb;
+        0x045f8cbcfd5eb3a66e652ba12024c17025c083aa5c36dfb7978f9ad247d47020;
 
-    bytes4 private constant _FUNC_RESET_OWNER = bytes4(keccak256("resetOwner(address)"));
+    //bytes4 private constant _FUNC_RESET_OWNER = bytes4(keccak256("resetOwner(address)"));
     //bytes4 private constant _FUNC_RESET_OWNERS = bytes4(keccak256("resetOwners(address[])"));
 
     mapping(address => uint256) walletRecoveryNonce;
     mapping(address => uint256) walletInitSeed;
+    mapping(address => bool) public accounts; // account address => bool
 
     mapping(address => GuardianInfo) internal walletGuardian;
     mapping(address => PendingGuardianEntry) internal walletPendingGuardian;
@@ -35,6 +38,9 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
     mapping(address => RecoveryEntry) recoveryEntries;
 
     uint128 private __seed = 0;
+    
+    constructor(address _moduleManager){moduleManager = _moduleManager;}
+
 
     modifier authorized(address _wallet) {
         require(IModuleManager(_wallet).isAuthorizedModule(address(this)), "unauthorized");
@@ -50,6 +56,42 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         require(recoveryEntries[_wallet].executeAfter == 0, "ongoing recovery");
         _;
     }
+
+    /**
+    @notice function that is called by moduleManager to set moduleId
+    @param _moduleId the identifier number of a module
+     */
+    function setModuleId(uint256 _moduleId) external {
+        require(msg.sender == moduleManager, "INVALID_CALLER");
+        moduleId = _moduleId;
+    }
+
+    /// @notice function called by Account in addModules() to enable account
+    function addAccount(address _account) public {
+        address registry = IModuleManager(moduleManager).accountRegistry();
+        require(
+            IAccountRegistry(registry).isAccount(_account),
+            "INAVLID_ACCOUNT"
+        );
+        accounts[_account] = true;
+    }
+
+    /// @notice function called by Account in addModules() to disable account
+    function removeAccount(address _account) public {
+        require(
+            IAccountRegistry(IModuleManager(moduleManager).accountRegistry())
+                .isAccount(_account),
+            "INAVLID_ACCOUNT"
+        );
+        require(isAccountEnabled(_account), "NOT_ENABLED");
+        accounts[_account] = false;
+    }
+
+    /// @notice view function to check if the account is enabled
+    function isAccountEnabled(address _account) public view returns (bool) {
+        return accounts[_account];
+    }
+
 
     function getChainId() public view returns (uint256) {
         uint256 id;
@@ -71,7 +113,7 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         );
     }
 
-    function encodeSocialRecoveryData(address _wallet, address _newOwners, uint256 _nonce)
+    function encodeSocialRecoveryData(address _wallet, address[] calldata _newOwners, uint256 _nonce)
         public
         view
         returns (bytes memory)
@@ -81,7 +123,7 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         return abi.encodePacked(bytes1(0x19), bytes1(0x01), domainSeparator(), recoveryHash);
     }
 
-    function getSocialRecoveryHash(address _wallet, address _newOwners, uint256 _nonce)
+    function getSocialRecoveryHash(address _wallet, address[] calldata _newOwners, uint256 _nonce)
         public
         view
         returns (bytes32)
@@ -159,7 +201,7 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
     function getGuardians(address wallet) public view returns (address[] memory) {
         return walletGuardian[wallet].guardians.list(AddressLinkedList.SENTINEL_ADDRESS, type(uint8).max);
     }
-    //basemodule modifers
+
     function updateGuardians(address[] calldata _guardians, uint256 _threshold, bytes32 _guardianHash)
         external
         authorized(sender())
@@ -230,12 +272,12 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
 
     function batchApproveRecovery(
         address _wallet,
-        address _newOwners,
+        address[] calldata _newOwners,
         uint256 signatureCount,
         bytes memory signatures
     ) external authorized(_wallet) {
         // TODO . clear pending guardian setting
-        //require(_newOwners.length > 0, "owners cannot be empty");
+        require(_newOwners.length > 0, "owners cannot be empty");
         uint256 _nonce = nonce(_wallet);
         // get recoverHash = hash(recoveryRecord) with EIP712
         bytes32 recoveryHash = getSocialRecoveryHash(_wallet, _newOwners, _nonce);
@@ -258,9 +300,9 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         _performRecovery(_wallet, request.newOwners);
     }
 
-    function _performRecovery(address _wallet, address _newOwners) private {
+    function _performRecovery(address _wallet, address[] memory _newOwners) private {
         // check nonce and update nonce
-        //require(_newOwners.length > 0, "owners cannot be empty");
+        require(_newOwners.length > 0, "owners cannot be empty");
         if (recoveryEntries[_wallet].nonce == nonce(_wallet)) {
             walletRecoveryNonce[_wallet]++;
         }
@@ -269,14 +311,7 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
 
         TwoUserMultisig smartAccount = TwoUserMultisig(payable(_wallet));
         // update owners
-        smartAccount.setOwner(_newOwners);
-        // Transaction memory transaction = Transaction({
-        //     to: _wallet,
-        //     value: 0, // Set the appropriate value if the transaction involves sending Ether
-        //     data: abi.encodeWithSignature("setOwner(address)", _newOwners)
-        // });
-        // smartAccount.executeTransactionFromOutside(transaction);
-
+        smartAccount.setOwner(_newOwners[0],_newOwners[1]);
         // emit RecoverySuccess
         emit SocialRecovery(_wallet, _newOwners);
     }
@@ -287,7 +322,7 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         delete recoveryEntries[_wallet];
     }
 
-    function _pendingRecovery(address _wallet, address _newOwners, uint256 _nonce) private {
+    function _pendingRecovery(address _wallet, address[] calldata _newOwners, uint256 _nonce) private {
         // new pending recovery
         uint256 executeAfter = block.timestamp + 2 days;
         recoveryEntries[_wallet] = RecoveryEntry(_newOwners, executeAfter, _nonce);
@@ -398,8 +433,8 @@ contract SocialRecoveryModule is ISocialRecoveryModule,BaseModule {
         return walletGuardian[_wallet].guardians.isExist(_guardian);
     }
 
-    function approveRecovery(address _wallet, address _newOwners) external authorized(_wallet) {
-       // require(_newOwners.length > 0, "owners cannot be empty");
+    function approveRecovery(address _wallet, address[] calldata _newOwners) external authorized(_wallet) {
+        require(_newOwners.length > 0, "owners cannot be empty");
         if (!isGuardian(_wallet, sender())) {
             revert("not authorized");
         }

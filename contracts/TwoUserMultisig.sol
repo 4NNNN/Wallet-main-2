@@ -5,7 +5,7 @@ import "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IAccount.sol
 import "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
 
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
-
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 // Used for signature validation
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./Modules/Multicall.sol";
@@ -42,22 +42,25 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
     // @dev modifier to block calls from non-account(address(this)) and non-owner address
     modifier onlySelfOrOwner() {
         require(
-            msg.sender == address(this) || msg.sender == owner,
+            msg.sender == address(this) || msg.sender == owner1 || msg.sender == owner2,
             "ONLY_SELF_OR_OWNER"
         );
         _;
     }
 
     modifier mixedAuth() {
-        if (msg.sender != owner && msg.sender != address(this))
+        if (msg.sender != owner1 && msg.sender != owner2 && msg.sender != address(this))
             revert MixedAuthFail(msg.sender);
         _;
     }
-    event EOAChanged(
-        address indexed _scw,
-        address indexed _oldEOA,
-        address indexed _newEOA
-    );
+    // event EOAChanged(
+    //     address indexed _scw,
+    //     address indexed _oldEOA1,
+    //     address indexed _newEOA1,
+    //     address indexed _oldEOA2,
+    //     address indexed _newEOA2
+    // );
+
      error MixedAuthFail(address caller);
      error OwnerCannotBeZero();
      error OwnerCanNotBeSelf();
@@ -78,11 +81,11 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
     /// @param _moduleIds: arrays of module identification numbers.
     function addModules(uint256[] memory _moduleIds) public onlySelfOrOwner {
         for (uint256 i; i < _moduleIds.length; i++) {
-            (address module, address moduleBase) = IModuleManager(moduleManager)
+            (address module) = IModuleManager(moduleManager)
                 .getModule(_moduleIds[i]);
 
             require(!isModule[module], "MODULE_ENABLED");
-            IModule(moduleBase).addAccount(address(this));
+            IModule(module).addAccount(address(this));
             isModule[module] = true;
         }
     }
@@ -92,28 +95,33 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
     /// @param _moduleIds: arrays of module identification numbers.
     function removeModules(uint256[] memory _moduleIds) public onlySelfOrOwner {
         for (uint256 i; i < _moduleIds.length; i++) {
-            (address module, address moduleBase) = IModuleManager(moduleManager)
+            (address module) = IModuleManager(moduleManager)
                 .getModule(_moduleIds[i]);
 
             require(isModule[module], "MODULE_NOT_ENABLED");
-            IModule(moduleBase).removeAccount(address(this));
+            IModule(module).removeAccount(address(this));
             isModule[module] = false;
         }
     }
 
     /**
      * @dev Allows to change the owner of the smart account by current owner or self-call (modules)
-     * @param _newOwner Address of the new signatory
+     
      */
-    function setOwner(address _newOwner) public mixedAuth {
-        if (_newOwner == address(0)) revert OwnerCannotBeZero();
-        if (_newOwner == address(this)) revert OwnerCanNotBeSelf();
-        if (_newOwner == owner) revert OwnerProvidedIsSame();
-        address oldOwner = owner;
+    function setOwner(address _newOwner1,address _newOwner2) public mixedAuth {
+        if (_newOwner1 == address(0)) revert OwnerCannotBeZero();
+        if (_newOwner2 == address(0)) revert OwnerCannotBeZero();
+        if (_newOwner1 == address(this)) revert OwnerCanNotBeSelf();
+        if (_newOwner2 == address(this)) revert OwnerCanNotBeSelf();
+        if (_newOwner1 == owner1) revert OwnerProvidedIsSame();
+        if (_newOwner2 == owner2) revert OwnerProvidedIsSame();
+        address oldOwner1 = owner1;
+        address oldOwner2 = owner2;
         assembly {
-            sstore(owner.slot, _newOwner)
+            sstore(owner1.slot, _newOwner1)
+            sstore(owner2.slot, _newOwner2)
         }
-        emit EOAChanged(address(this), oldOwner, _newOwner);
+        //emit EOAChanged(address(this), oldOwner1, _newOwner1,oldOwner2,_newOwner2);
     }
 
     function validateTransaction(
@@ -179,9 +187,9 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
             SystemContractsCaller.systemCallWithPropagatedRevert(gas, to, value, data);
            
         }
-        else if (isBatched(_transaction.data, to)){
-             multicall(_transaction.data[4:]);
-        }
+        // else if (isBatched(_transaction.data, to)){
+        //      multicall(_transaction.data[4:]);
+        // }
         else if (isModule[to]){
             Address.functionDelegateCall(to, data);
         }
@@ -319,6 +327,19 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
         Transaction calldata _transaction
     ) external payable override onlyBootloader {
         _transaction.processPaymasterInput();
+    }
+
+    /// @notice method to prove that this contract inherits IAccount interface, called
+    /// @param interfaceId identifier unique to each interface
+    /// @return true if this contract implements the interface defined by `interfaceId`
+    /// Details: https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified[EIP section]
+    /// This function call must use less than 30 000 gas
+    function supportsInterface(bytes4 interfaceId)
+        external
+        pure
+        returns (bool)
+    {
+        return interfaceId == type(IAccount).interfaceId;
     }
 
     fallback() external {

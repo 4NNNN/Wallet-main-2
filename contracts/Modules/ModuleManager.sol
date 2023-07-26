@@ -22,7 +22,6 @@ contract ModuleManager is IModuleManager {
     struct Module {
         uint256 id;
         address module;
-        address modulebase;
     }
 
     mapping(uint256 => Module) public modules; // moduleId => Module
@@ -42,7 +41,7 @@ contract ModuleManager is IModuleManager {
     return false;
     }
 
-    function addModule(address _module, address _moduleBase)
+    function addModule(address _module)
         external
         returns (uint256)
     {
@@ -50,10 +49,10 @@ contract ModuleManager is IModuleManager {
         uint256 nexModuleIndex = moduleIndex + 1;
         modules[nexModuleIndex].id = nexModuleIndex;
         modules[nexModuleIndex].module = _module;
-        modules[nexModuleIndex].modulebase = _moduleBase;
+        //modules[nexModuleIndex].modulebase = _moduleBase;
 
         // allocate moduleId to each added module
-        IModule(_moduleBase).setModuleId(nexModuleIndex);
+        IModule(_module).setModuleId(nexModuleIndex);
 
         moduleIndex++;
 
@@ -62,12 +61,11 @@ contract ModuleManager is IModuleManager {
 
     /// @param _moduleId the identifier number that is used to get the information about every module.
     /// @return module address
-    /// @return modulebase address
     function getModule(uint256 _moduleId)
         external
         view
-        returns (address, address)
+        returns (address)
     {
-        return (modules[_moduleId].module, modules[_moduleId].modulebase);
+        return (modules[_moduleId].module);
     }
 }

@@ -12,8 +12,8 @@ const provider = new Provider("http://localhost:3050/");
 const wallet = new Wallet("0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110");
 const deployer = new Deployer(hre, wallet);
 
-const owner1 = new ethers.Wallet("0xd448c30e6d75d195768346a54a0e27f12d2860d09e6e9f177b861090c29d935e");
-const owner2 = new ethers.Wallet("0x958ca55ed5c0c0d42a956103ed1f0bb6bd08b289a9f43fa8c3ac65a301fcd78d");
+const owner1 = new ethers.Wallet("0xb6e56768025fc90005e29639ceec9678d04a697d4204bf3a4c1a7d4ce681dcb8");
+const owner2 = new ethers.Wallet("0x23c6010b3d3e9d86b934f1db87390994cbe5bd574e4bc520b13b3324132200dd");
 const accountArtifact = await deployer.loadArtifact("TwoUserMultisig");
 //
 const erc20Artifact = await deployer.loadArtifact("MyERC20");
@@ -24,7 +24,7 @@ const erc20 = (await deployer.deploy(erc20Artifact, ["localtoken", "TT", 18]));
 console.log(`erc: "${erc20.address}",`)
 //const paymaster = "0x6c4f87c025020d6d0Aa40414CdcdCbf09bAFaA48";
 
-const accountContract = "0x14c47054cCF3D52Ce7F5540A627950eCFDe0dce7"
+const accountContract = "0x5c32a0B14dc82d926bd5f3f9FDfD1E9A2043a2cf"
 console.log(`Minting 5 tokens for empty wallet`);
 
 await (

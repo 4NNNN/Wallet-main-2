@@ -26,7 +26,7 @@ struct RecoveryEntry {
 // 2. recovery while already in chainging guardian?
 // will cancel the changing guardian
 
-interface ISocialRecoveryModule {
+interface ISocialRecovery {
     event AnonymousGuardianRevealed(address indexed wallet, address[] indexed guardians, bytes32 guardianHash);
     event ApproveRecovery(address indexed wallet, address indexed guardian, bytes32 indexed recoveryHash);
     event  PendingRecovery(address indexed _wallet, address _newOwners, uint256 _nonce, uint256 executeAfter);

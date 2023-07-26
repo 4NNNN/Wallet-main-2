@@ -3,8 +3,8 @@ import * as ethers from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 // Put the address of your AA factory
-const AA_FACTORY_ADDRESS = "0xb9F68be12C19FF0cB897259DF9F00b5368d54531";
-const modulemanager = "0x011DDA7296ABaDd4E06Ca51a91119c2288f91eB9"
+const AA_FACTORY_ADDRESS = "0xd00aA47887597f95a68f87f1a5C96Df1B3fF0bdF";
+const modulemanager = "0x4f4A0F99981E9884C9a3FfDeD9C33FF8D088bC30"
 export default async function (hre: HardhatRuntimeEnvironment) {
   //const provider = new Provider("https://testnet.era.zksync.dev");
   const provider = new Provider("http://localhost:3050/");
@@ -25,7 +25,7 @@ export default async function (hre: HardhatRuntimeEnvironment) {
   console.log(`Owner 1 address: ${owner1.address}`);
   console.log(`Owner 1 address: ${owner1.privateKey}`);
   console.log(`Owner 2 address: ${owner2.address}`);
-  console.log(`Owner 1 address: ${owner2.privateKey}`);
+  console.log(`Owner 2 address: ${owner2.privateKey}`);
 
   // For the simplicity of the tutorial, we will use zero hash as salt
   const salt = ethers.constants.HashZero;
