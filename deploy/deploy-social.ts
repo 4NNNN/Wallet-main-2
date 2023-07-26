@@ -7,7 +7,7 @@ import { ZKSYNC_MAIN_ABI } from "zksync-web3/build/src/utils";
 export default async function (hre: HardhatRuntimeEnvironment) {
  const provider = new Provider("https://zksync2-testnet.zksync.dev");
 //const provider = new Provider("http://localhost:3050/");
-const wallet = new Wallet("2c204cd103db06e84c958d479372ce60567d98bf24ace26a0cc5191870fed067").connect(provider);
+const wallet = new Wallet("").connect(provider);
 const owner1 = new ethers.Wallet("0x1ab92010c8ded1aef7205517249ab2f214c5816618b2614beb81198611339aba");
 const owner2 = new ethers.Wallet("0x138861f1aad56f1c70f85b20df7aedeb64c9a72aaf4615b816e199157fa9288e");
 const deployer = new Deployer(hre, wallet);
