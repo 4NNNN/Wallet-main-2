@@ -7,18 +7,15 @@ import { toBN, GASLIMIT } from "./helper";
 export async function deployAccount (
     wallet: Wallet,
     deployer: Deployer,
-    moduleManager:Contract,
-    registry: Contract
     ) {
 
     // Deploy AccountFactory
     const factoryArtifact = await deployer.loadArtifact("AAFactory");
     const accountArtifact = await deployer.loadArtifact("TwoUserMultisig");
     const bytecodeHash = utils.hashBytecode(accountArtifact.bytecode);
-    console.log(`MM: "${moduleManager.address}",`)
     const factory = <Contract>(await deployer.deploy(
         factoryArtifact, 
-        [bytecodeHash, moduleManager.address, registry.address], 
+        [bytecodeHash], 
         undefined, 
         [accountArtifact.bytecode,])
         );
@@ -35,10 +32,10 @@ export async function deployAccount (
     console.log(`Owner 1 address: ${owner1.privateKey}`);
     console.log(`Owner 2 address: ${owner2.address}`);
     console.log(`Owner 2 address: ${owner2.privateKey}`);
-    const transaction = await(await factory.deployAccount(salt, owner1.address,owner2.address,GASLIMIT)).wait();
+    
+    const transaction = await(await factory.deployAccount(salt,[owner1.address,owner2.address],"2",GASLIMIT)).wait();
     const accountAddr = (await utils.getDeployedContracts(transaction))[0].deployedAddress
     const accountContract = new ethers.Contract(accountAddr, accountArtifact.abi, wallet)
     console.log(`account: "${accountContract.address}",`)
-    //await(await accountContract.addModules([1], GASLIMIT)).wait();
 
 }

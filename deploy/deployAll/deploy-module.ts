@@ -9,22 +9,19 @@ export async function deployModules (
     ):Promise<any> {
 
     // Deploy AccountRegistry
-    const registryArtifact = await deployer.loadArtifact("AccountRegistry");
+    const registryArtifact = await deployer.loadArtifact("GuardianStorage");
     const registry = <Contract>(await deployer.deploy(registryArtifact, []));
-    console.log(`registry: "${registry.address}",`)
+    console.log(`Guradianstorage: "${registry.address}",`)
 
-    // Deploy ModuleManager
-    const moduleManagerArtifact = await deployer.loadArtifact("ModuleManager");
-    const moduleManager = <Contract>(await deployer.deploy(moduleManagerArtifact, [wallet.address, registry.address]));
-    console.log(`moduleManager: "${moduleManager.address}",`)
+    // // Deploy ModuleManager
+    // const moduleManagerArtifact = await deployer.loadArtifact("ModuleManager");
+    // const moduleManager = <Contract>(await deployer.deploy(moduleManagerArtifact, [wallet.address, registry.address]));
+    // console.log(`moduleManager: "${moduleManager.address}",`)
 
-    const scrArtifact = await deployer.loadArtifact("SocialRecovery");
-    const sccontract = (await deployer.deploy(scrArtifact,[moduleManager.address]));
+    const scrArtifact = await deployer.loadArtifact("SocialRecoveryModule");
+    const sccontract = (await deployer.deploy(scrArtifact,[registry.address,"0"]));
     console.log(`sccontract: "${sccontract.address}",`)
 
-    // ModuleManager: add Module: 
-    await (await moduleManager.addModule(sccontract.address, GASLIMIT)).wait();
-    const tx =  await moduleManager.getModule([1], GASLIMIT);
-    console.log(tx)
-    return [sccontract, moduleManager, registry]
+
+    return [sccontract]
 }

@@ -6,35 +6,30 @@ import { ZKSYNC_MAIN_ABI } from "zksync-web3/build/src/utils";
 import deployMultisig from "./deploy-multisig";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-// const provider = new Provider("https://zksync2-testnet.zksync.dev");
-const provider = new Provider("http://localhost:3050/");
+ const provider = new Provider("https://zksync2-testnet.zksync.dev");
+//const provider = new Provider("http://localhost:3050/");
 
-const wallet = new Wallet("0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110");
+const wallet = new Wallet("2c204cd103db06e84c958d479372ce60567d98bf24ace26a0cc5191870fed067").connect(provider);//0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110
 const deployer = new Deployer(hre, wallet);
 
-const owner1 = new ethers.Wallet("0xb6e56768025fc90005e29639ceec9678d04a697d4204bf3a4c1a7d4ce681dcb8");
-const owner2 = new ethers.Wallet("0x23c6010b3d3e9d86b934f1db87390994cbe5bd574e4bc520b13b3324132200dd");
-const accountArtifact = await deployer.loadArtifact("TwoUserMultisig");
-//
+const owner1 = new ethers.Wallet("0x926d1f44286809477baf5b943830acf7ee08deac145c1b7cedc571c2b4d65585");
+const owner2 = new ethers.Wallet("0xbff6de67ea3f9f344f03611f20e743ef529bb17e9ee3ec33d85d2ed15f61192d");
+
 const erc20Artifact = await deployer.loadArtifact("MyERC20");
-//const erc201 = '0xC614909530f3905023E46fe8195B174E971A1ED4';
-//const erc20 = new ethers.Contract(erc20Artifact, provider);
-//const erc20Contract = await erc20.deploy();
+
 const erc20 = (await deployer.deploy(erc20Artifact, ["localtoken", "TT", 18]));
 console.log(`erc: "${erc20.address}",`)
 //const paymaster = "0x6c4f87c025020d6d0Aa40414CdcdCbf09bAFaA48";
 
-const accountContract = "0x5c32a0B14dc82d926bd5f3f9FDfD1E9A2043a2cf"
+const accountContract = "0xdfF49440f379edcFF85110E73fD0CEB2aDa1A677"
 console.log(`Minting 5 tokens for empty wallet`);
 
-await (
-      await deployer.zkWallet.sendTransaction({
-        to: accountContract,
-        value: ethers.utils.parseEther("0.3"),
-      })       
-    ).wait();
-   console.log(deployer.zkWallet.address)
-
+// await (
+//       await deployer.zkWallet.sendTransaction({
+//         to: accountContract,
+//         value: ethers.utils.parseEther("0.01"),
+//       })       
+//     ).wait();
 
 // const paymasterParams = utils.getPaymasterParams(paymaster, {
 //   type: "ApprovalBased",
@@ -46,7 +41,7 @@ await (
 // });
 // console.log(paymasterParams)
 
-let mint = await erc20.populateTransaction.mint(wallet.address, 5);
+let mint = await erc20.populateTransaction.mint(wallet.address, 10000);
 // 
  mint = {
   ...mint,
@@ -78,22 +73,3 @@ let mint = await erc20.populateTransaction.mint(wallet.address, 5);
  await sentTx.wait();
  console.log("after this")
 }
-
-//SWC
-// registry: "0x3De9Bc674167743C83961d99F9adDD3426BBfC4D",
-// moduleManager: "0xe3B3a4e5DAF220bca8F91e4d23a468E0D1930c94",
-// aafactory: "0x8f41f36F2cd2cE0FB57cE61f205E6DA17Ab23282",
-// account: "0x52751eab8F7b532cb887A85B7d966680D20E22F8",
-// ERC20 address: 0xC614909530f3905023E46fe8195B174E971A1ED4
-//Paymaster address: 0x6c4f87c025020d6d0Aa40414CdcdCbf09bAFaA48
-//https://goerli.explorer.zksync.io/address/0x52751eab8F7b532cb887A85B7d966680D20E22F8
-// Multisig - 1
-// Path: custom-aa-tutorial/deploy/deploy-multisig.ts
-// Owner 1 address: 0x6520813043c87156551C8dFF0eC827aA0F6F255B
-// Owner 1 pk: 0x0d08ab7d3133ece3c08b3c632b72394c063b34a1b5129c44d7ac5ad34222e90f
-// Owner 2 address: 0xDeB172067C3FAff9180DE840D08Ba5924EE6e456
-// Owner 2 pk: 0x7b06b431fa678c0407be9d43d5fd1922e6f4b225b850b494e30efd4b17f8935f
-// Multisig account deployed on address 0x7dFe9ce52Aa24027d6B2493D12D35DE785738CEc
-// Sending funds to multisig account
-// Multisig account balance is 0
-// AA factory address: 0x3291718F15f1B87C7F8Ef0F014F5cB74260Bc239

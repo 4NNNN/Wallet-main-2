@@ -16,7 +16,7 @@ struct PendingGuardianEntry {
 }
 
 struct RecoveryEntry {
-    address newOwners;
+    address[] newOwners;
     uint256 executeAfter;
     uint256 nonce;
 }
@@ -26,11 +26,11 @@ struct RecoveryEntry {
 // 2. recovery while already in chainging guardian?
 // will cancel the changing guardian
 
-interface ISocialRecovery {
+interface ISocialRecoveryModule {
     event AnonymousGuardianRevealed(address indexed wallet, address[] indexed guardians, bytes32 guardianHash);
     event ApproveRecovery(address indexed wallet, address indexed guardian, bytes32 indexed recoveryHash);
-    event  PendingRecovery(address indexed _wallet, address _newOwners, uint256 _nonce, uint256 executeAfter);
-    event  SocialRecovery(address indexed _wallet, address _newOwners);
+    event  PendingRecovery(address indexed _wallet, address[] indexed _newOwners, uint256 _nonce, uint256 executeAfter);
+    event  SocialRecovery(address indexed _wallet, address[] indexed _newOwners);
     event  SocialRecoveryCanceled(address indexed _wallet, uint256 _nonce);
     // change guardians --> wait 2 day --> guardian changed
     function updateGuardians(
@@ -48,14 +48,14 @@ interface ISocialRecovery {
     //                --> all guardian confim recovery --> execute recovery
     function batchApproveRecovery(
         address _wallet,
-        address _newOwners,
+        address[] calldata _newOwners,
         uint256 signatureCount,
         bytes memory signatures
     ) external;
 
     function approveRecovery(
         address _wallet,
-        address _newOwners
+        address[] calldata _newOwners
     ) external;
 
     function executeRecovery(address _wallet) external;

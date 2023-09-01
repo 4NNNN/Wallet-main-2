@@ -10,15 +10,15 @@ abstract contract BaseModule {
 
     function inited(address wallet) internal view virtual returns (bool);
 
-    function _init(bytes calldata data) internal virtual;
+    function _init(bytes calldata data) internal virtual returns (address,uint256,uint256);
 
     function _deInit() internal virtual;
 
-    function sender() internal view returns (address) {
+    function sender() public view returns (address) {
         return msg.sender;
     }
   //params - (address[] memory _guardians, uint256 _threshold, bytes32 _guardianHash)
-    function walletInit(bytes calldata data) external {
+    function walletInit(bytes calldata data) external returns (address,uint256,uint256) {
         address _sender = sender();
         // if (!inited(_sender)) {
         //     if (!IModuleManager(_sender).isAuthorizedModule(address(this))) {

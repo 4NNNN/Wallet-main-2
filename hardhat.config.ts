@@ -20,8 +20,8 @@ const config: HardhatUserConfig = {
     zkSyncTestnet: {
       url: "https://zksync2-testnet.zksync.dev",
       ethNetwork: "https://goerli.infura.io/v3/0100a2dba004414e9b71717ef18fe197" , // e.g. alchemy url
-      // url: "http://localhost:3050",
-      // ethNetwork: "http://localhost:8545",
+      //url: "http://localhost:3050",
+      //ethNetwork: "http://localhost:8545",
       zksync: true,
       verifyURL: 'https://zksync2-testnet-explorer.zksync.dev/contract_verification'
     },

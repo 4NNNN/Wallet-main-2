@@ -8,26 +8,30 @@ import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 // Used for signature validation
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "./Modules/Multicall.sol";
+//import "./Modules/Multicall.sol";
 // Access zkSync system contracts, in this case for nonce validation vs NONCE_HOLDER_SYSTEM_CONTRACT
 import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 // to call non-view method of system contracts
 import "@matterlabs/zksync-contracts/l2/system-contracts/libraries/SystemContractsCaller.sol";
-import "./interfaces/IModule.sol";
-import "./interfaces/IModuleManager.sol";
+// import "./interfaces/IModule.sol";
+// import "./interfaces/IModuleManager.sol";
+import "contracts/Modules/ModuleManager.sol";
+import "./Owner.sol";
+import "./interfaces/ISignatureValidator.sol";
+import "./interfaces/safemath.sol";
 
-contract TwoUserMultisig is IAccount,IERC1271,Multicall {
+
+
+contract TwoUserMultisig is IAccount,OwnerManager,ModuleManager,ISignatureValidatorConstants {
     // to get transaction hash
     using TransactionHelper for Transaction;
-    address public moduleManager;
-    // state variables for account owners
-    address public owner1;
-    address public owner2;
+    using SafeMath for uint256;
+
 
     bytes4 constant EIP1271_SUCCESS_RETURN_VALUE = 0x1626ba7e;
 
      /// @dev returns true if the address is an enabled module.
-    mapping(address => bool) public isModule;
+    //mapping(address => bool) public isModule;
 
     modifier onlyBootloader() {
         require(
@@ -38,90 +42,15 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
         _;
     }
 
-    // @dev modifier to block calls from non-account(address(this)) and non-owner address
-    modifier onlySelfOrOwner() {
-        require(
-            msg.sender == address(this) || msg.sender == owner1 || msg.sender == owner2,
-            "ONLY_SELF_OR_OWNER"
-        );
-        _;
+
+    constructor(address[] memory _owners, uint256 _threshold) {
+        // owner1 = _owners[0];
+        // owner2 = _owners[1];
+        //threshold = 1;(used in safe for singleton)
+        setupOwners(_owners, _threshold);
+        setupModules(address(0), bytes(""));
     }
-
-    modifier mixedAuth() {
-        if (msg.sender != owner1 && msg.sender != owner2 && msg.sender != address(this))
-            revert MixedAuthFail(msg.sender);
-        _;
-    }
-    // event EOAChanged(
-    //     address indexed _scw,
-    //     address indexed _oldEOA1,
-    //     address indexed _newEOA1,
-    //     address indexed _oldEOA2,
-    //     address indexed _newEOA2
-    // );
-
-     error MixedAuthFail(address caller);
-     error OwnerCannotBeZero();
-     error OwnerCanNotBeSelf();
-     error OwnerProvidedIsSame();
-
-    constructor(address _owner1, address _owner2,address _moduleManager) {
-        owner1 = _owner1;
-        owner2 = _owner2;
-        moduleManager = _moduleManager;
-    }
-
-    // ---------------------------------- //
-    //          Modules Add/Remove        //
-    // ---------------------------------- //
-
-    /// @notice this function enables available modules for the account
-    /// @dev fetches module addresses by getModule(moduleId) from moduleManager
-    /// @param _moduleIds: arrays of module identification numbers.
-    function addModules(uint256[] memory _moduleIds) public onlySelfOrOwner {
-        for (uint256 i; i < _moduleIds.length; i++) {
-            (address module) = IModuleManager(moduleManager)
-                .getModule(_moduleIds[i]);
-
-            require(!isModule[module], "MODULE_ENABLED");
-            IModule(module).addAccount(address(this));
-            isModule[module] = true;
-        }
-    }
-
-    /// @notice this function disables added modules for the account
-    /// @dev fetches module addresses by getModule(moduleId) from moduleManager
-    /// @param _moduleIds: arrays of module identification numbers.
-    function removeModules(uint256[] memory _moduleIds) public onlySelfOrOwner {
-        for (uint256 i; i < _moduleIds.length; i++) {
-            (address module) = IModuleManager(moduleManager)
-                .getModule(_moduleIds[i]);
-
-            require(isModule[module], "MODULE_NOT_ENABLED");
-            IModule(module).removeAccount(address(this));
-            isModule[module] = false;
-        }
-    }
-
-    /**
-     * @dev Allows to change the owner of the smart account by current owner or self-call (modules)
-     
-     */
-    function setOwner(address _newOwner1,address _newOwner2) public mixedAuth {
-        if (_newOwner1 == address(0)) revert OwnerCannotBeZero();
-        if (_newOwner2 == address(0)) revert OwnerCannotBeZero();
-        if (_newOwner1 == address(this)) revert OwnerCanNotBeSelf();
-        if (_newOwner2 == address(this)) revert OwnerCanNotBeSelf();
-        if (_newOwner1 == owner1) revert OwnerProvidedIsSame();
-        if (_newOwner2 == owner2) revert OwnerProvidedIsSame();
-        address oldOwner1 = owner1;
-        address oldOwner2 = owner2;
-        assembly {
-            sstore(owner1.slot, _newOwner1)
-            sstore(owner2.slot, _newOwner2)
-        }
-        //emit EOAChanged(address(this), oldOwner1, _newOwner1,oldOwner2,_newOwner2);
-    }
+    
 
     function validateTransaction(
         bytes32,
@@ -160,7 +89,7 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
         uint256 totalRequiredBalance = _transaction.totalRequiredBalance();
         require(totalRequiredBalance <= address(this).balance, "Not enough balance for fee + value");
 
-        if (isValidSignature(txHash, _transaction.signature) == EIP1271_SUCCESS_RETURN_VALUE) {
+        if (checkSignatures(txHash, _transaction.signature) == EIP1271_SUCCESS_RETURN_VALUE) {
             magic = ACCOUNT_VALIDATION_SUCCESS_MAGIC;
         }
     }
@@ -186,12 +115,10 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
             SystemContractsCaller.systemCallWithPropagatedRevert(gas, to, value, data);
            
         }
-        // else if (isBatched(_transaction.data, to)){
-        //      multicall(_transaction.data[4:]);
-        // }
-        else if (isModule[to]){
-            Address.functionDelegateCall(to, data);
+        else if(isModuleEnabled(to)){
+            require(execute(to, 0, data, Enum.Operation.Call, type(uint256).max), "GS000");
         }
+
         else {
             bool success;
             assembly {
@@ -209,37 +136,91 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
         _executeTransaction(_transaction);
     }
 
-    function isValidSignature(bytes32 _hash, bytes memory _signature)
-        public
-        view
-        override
-        returns (bytes4 magic)
-    {
+    /**
+     * @notice Checks whether the signature provided is valid for the provided data and hash. Reverts otherwise.
+     * @param dataHash Hash of the data (could be either a message hash or transaction hash)
+     * @param signatures Signature data that should be verified.
+     *                   Can be packed ECDSA signature ({bytes32 r}{bytes32 s}{uint8 v}), contract signature (EIP-1271) or approved hash.
+     */
+    function checkSignatures(bytes32 dataHash, bytes memory signatures) public view returns (bytes4 magic) {
+        // Load threshold to avoid multiple storage loads
         magic = EIP1271_SUCCESS_RETURN_VALUE;
+        uint256 _threshold = threshold;
+        // Check that a threshold is set
+        require(_threshold > 0, "GS001");
 
-        if (_signature.length != 130) {
-            // Signature is invalid anyway, but we need to proceed with the signature verification as usual
-            // in order for the fee estimation to work correctly
-            _signature = new bytes(130);
+        if (checkNSignatures(dataHash, signatures, _threshold)){
+            magic = EIP1271_SUCCESS_RETURN_VALUE;
+        }
+        else{
+            magic = bytes4(0);
+        }
+ 
+    }
+    
+    /// @dev divides bytes signature into `uint8 v, bytes32 r, bytes32 s`.
+   
+    /// @param signatures concatenated rsv signatures
+    function signatureSplit(bytes memory signatures, uint256 pos) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        // solhint-disable-next-line no-inline-assembly
+        /// @solidity memory-safe-assembly
+        assembly {
+            let signaturePos := mul(0x41, pos)
+            r := mload(add(signatures, add(signaturePos, 0x20)))
+            s := mload(add(signatures, add(signaturePos, 0x40)))
+            v := byte(0, mload(add(signatures, add(signaturePos, 0x60))))
+        }
+    }
+
+    /**
+     * @notice Checks whether the signature provided is valid for the provided data and hash. Reverts otherwise.
+     * @dev Since the EIP-1271 does an external call, be mindful of reentrancy attacks.
+     *      The data parameter (bytes) is not used since v1.5.0 as it is not required anymore. Prior to v1.5.0,
+     *      data parameter was used in contract signature validation flow using legacy EIP-1271.
+     *      Version v1.5.0, uses dataHash parameter instead of data with updated EIP-1271 implementation.
+     
+     * @param dataHash Hash of the data (could be either a message hash or transaction hash)
+     * @param signatures Signature data that should be verified.
+     *                   Can be packed ECDSA signature ({bytes32 r}{bytes32 s}{uint8 v}), contract signature (EIP-1271) or approved hash.
+     * @param requiredSignatures Amount of required valid signatures.
+     */
+    function checkNSignatures(
+        bytes32 dataHash,
+        bytes memory signatures,
+        uint256 requiredSignatures
+    ) public view returns (bool){
+        address lastOwner = address(0);
+        address currentOwner;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+        uint256 i;
+        uint256 validSignatures = 0;
+        
+        for (i = 0; i < requiredSignatures; i++) {
+
+            (v, r, s) = signatureSplit(signatures,i);
+            bytes memory reconstructedSignature = joinSignature(v, r, s);
+            require(checkValidECDSASignatureFormat(reconstructedSignature),"Invalid signature format");
+            // Default is the ecrecover flow with the provided data hash
+            // Use ecrecover with the messageHash for EOA signatures
+            currentOwner = ECDSA.recover(dataHash,reconstructedSignature);
             
-            // Making sure that the signatures look like a valid ECDSA signature and are not rejected rightaway
-            // while skipping the main verification process.
-            _signature[64] = bytes1(uint8(27));
-            _signature[129] = bytes1(uint8(27));
+            require(owners[currentOwner] != address(0),"GS0002");
+            require(currentOwner != SENTINEL_OWNERS, "GS026");
+            lastOwner = currentOwner;
+            validSignatures++;
+
         }
+        return validSignatures == requiredSignatures;
+    }
 
-        (bytes memory signature1, bytes memory signature2) = extractECDSASignature(_signature);
-
-        if(!checkValidECDSASignatureFormat(signature1) || !checkValidECDSASignatureFormat(signature2)) {
-            magic = bytes4(0);
-        }
-
-        address recoveredAddr1 = ECDSA.recover(_hash, signature1);
-        address recoveredAddr2 = ECDSA.recover(_hash, signature2);
-
-        // Note, that we should abstain from using the require here in order to allow for fee estimation to work
-        if(recoveredAddr1 != owner1 || recoveredAddr2 != owner2) {
-            magic = bytes4(0);
+    function joinSignature(uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes memory signature) {
+    signature = new bytes(65);
+        assembly {
+        mstore(add(signature, 0x20), r)
+        mstore(add(signature, 0x40), s)
+        mstore8(add(signature, 0x60), v)
         }
     }
 
@@ -280,36 +261,7 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
 
         return true;
     }
-    
-    function extractECDSASignature(bytes memory _fullSignature) internal pure returns (bytes memory signature1, bytes memory signature2) {
-        require(_fullSignature.length == 130, "Invalid length");
 
-        signature1 = new bytes(65);
-        signature2 = new bytes(65);
-
-        // Copying the first signature. Note, that we need an offset of 0x20 
-        // since it is where the length of the `_fullSignature` is stored
-        assembly {
-            let r := mload(add(_fullSignature, 0x20))
-			let s := mload(add(_fullSignature, 0x40))
-			let v := and(mload(add(_fullSignature, 0x41)), 0xff)
-
-            mstore(add(signature1, 0x20), r)
-            mstore(add(signature1, 0x40), s)
-            mstore8(add(signature1, 0x60), v)
-        }
-
-        // Copying the second signature.
-        assembly {
-            let r := mload(add(_fullSignature, 0x61))
-            let s := mload(add(_fullSignature, 0x81))
-            let v := and(mload(add(_fullSignature, 0x82)), 0xff)
-
-            mstore(add(signature2, 0x20), r)
-            mstore(add(signature2, 0x40), s)
-            mstore8(add(signature2, 0x60), v)
-        }
-    }
 
     function payForTransaction(
         bytes32,
@@ -353,3 +305,37 @@ contract TwoUserMultisig is IAccount,IERC1271,Multicall {
         // Note, that is okay if the bootloader sends funds with no calldata as it may be used for refunds/operator payments
     }
 }
+
+
+// if (v == 0) {
+//                 // If v is 0 then it is a contract signature
+//                 // When handling contract signatures the address of the contract is encoded into r
+//                 currentOwner = address(uint160(uint256(r)));
+
+//                 // Check that signature data pointer (s) is not pointing inside the static part of the signatures bytes
+//                 // This check is not completely accurate, since it is possible that more signatures than the threshold are send.
+//                 // Here we only check that the pointer is not pointing inside the part that is being processed
+//                 require(uint256(s) >= requiredSignatures.mul(65), "GS021");
+
+//                 // Check that signature data pointer (s) is in bounds (points to the length of data -> 32 bytes)
+//                 require(uint256(s).add(32) <= signatures.length, "GS022");
+
+//                 // Check if the contract signature is in bounds: start of data is s + 32 and end is start + signature length
+//                 uint256 contractSignatureLen;
+//                 // solhint-disable-next-line no-inline-assembly
+//                 /// @solidity memory-safe-assembly
+//                 assembly {
+//                     contractSignatureLen := mload(add(add(signatures, s), 0x20))
+//                 }
+//                 require(uint256(s).add(32).add(contractSignatureLen) <= signatures.length, "GS023");
+
+//                 // Check signature
+//                 bytes memory contractSignature;
+//                 // solhint-disable-next-line no-inline-assembly
+//                 /// @solidity memory-safe-assembly
+//                 assembly {
+//                     // The signature data for contract signatures is appended to the concatenated signatures and the offset is stored in s
+//                     contractSignature := add(add(signatures, s), 0x20)
+//                 }
+//                 require(ISignatureValidator(currentOwner).isValidSignature(dataHash, contractSignature) == EIP1271_SUCCESS_RETURN_VALUE, "GS024");
+//             }

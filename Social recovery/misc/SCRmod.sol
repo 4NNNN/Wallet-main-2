@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0
+ // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
-import "contracts/interfaces/ISocialRecovery.sol";//has to be there
+import "contracts/interfaces/ISCRmod.sol";//has to be there
 import "./Basemodule.sol";//imp solved
 import "./lib/AddressLinkedList.sol";//storage and mapping contracts/Modules/lib/AddressLinkedList.sol
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
@@ -9,7 +9,7 @@ import "contracts/interfaces/IModuleManager.sol";//4timescontracts/interfaces/IM
 import "contracts/interfaces/IAccountRegistry.sol";
 import "../TwoUserMultisig.sol";
 
-contract SocialRecovery is ISocialRecovery,BaseModule {
+contract SocialRecovery is ISocialRecoveryModule,BaseModule {
     using AddressLinkedList for mapping(address => address);
     bytes4 public moduleIdentifier = bytes4(keccak256("SWAP_MODULE"));
     string public constant NAME = "Social Recovery Module";
@@ -113,7 +113,7 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         );
     }
 
-    function encodeSocialRecoveryData(address _wallet, address _newOwners, uint256 _nonce)
+    function encodeSocialRecoveryData(address _wallet, address[] calldata _newOwners, uint256 _nonce)
         public
         view
         returns (bytes memory)
@@ -123,7 +123,7 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         return abi.encodePacked(bytes1(0x19), bytes1(0x01), domainSeparator(), recoveryHash);
     }
 
-    function getSocialRecoveryHash(address _wallet, address _newOwners, uint256 _nonce)
+    function getSocialRecoveryHash(address _wallet, address[] calldata _newOwners, uint256 _nonce)
         public
         view
         returns (bytes32)
@@ -140,23 +140,26 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         return walletInitSeed[wallet] != 0;
     }
 
-    function _init(bytes calldata data) internal override {
+    function _init(bytes calldata data) internal override returns (address,uint256,uint256){
         (address[] memory _guardians, uint256 _threshold, bytes32 _guardianHash) =
             abi.decode(data, (address[], uint256, bytes32));
-        address _sender = sender();
-        require(_threshold > 0 && _threshold <= _guardians.length, "threshold error");
-        if (_guardians.length > 0) {
-            require(_guardianHash == bytes32(0), "cannot set anonomous guardian with onchain guardian");
-        }
-        if (_guardians.length == 0) {
-            require(_guardianHash != bytes32(0), "guardian config error");
-        }
+        //address _sender = sender();
+        address wallet = sender();
+        // require(_threshold > 0 && _threshold <= _guardians.length, "threshold error");
+        // if (_guardians.length > 0) {
+        //     require(_guardianHash == bytes32(0), "cannot set anonomous guardian with onchain guardian");
+        // }
+        // if (_guardians.length == 0) {
+        //     require(_guardianHash != bytes32(0), "guardian config error");
+        // }
         for (uint256 i = 0; i < _guardians.length; i++) {
-            walletGuardian[_sender].guardians.add(_guardians[i]);
+            walletGuardian[wallet].guardians.add(_guardians[i]);
         }
-        walletGuardian[_sender].guardianHash = _guardianHash;
-        walletGuardian[_sender].threshold = _threshold;
-        walletInitSeed[_sender] = _newSeed();
+        walletGuardian[wallet].guardianHash = _guardianHash;
+        walletGuardian[wallet].threshold = _threshold;
+        walletInitSeed[wallet] = _newSeed();
+        return (sender(),walletGuardian[wallet].guardians.size(),walletGuardian[wallet].threshold);
+
     }
 
     function _deInit() internal override {
@@ -201,10 +204,10 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
     function getGuardians(address wallet) public view returns (address[] memory) {
         return walletGuardian[wallet].guardians.list(AddressLinkedList.SENTINEL_ADDRESS, type(uint8).max);
     }
-    //basemodule modifers
+
     function updateGuardians(address[] calldata _guardians, uint256 _threshold, bytes32 _guardianHash)
         external
-        authorized(sender())
+       // authorized(sender())
         whenNotRecovery(sender())
         checkLatestGuardian(sender())
     {
@@ -217,7 +220,7 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         }
         require(_threshold > 0 && _threshold <= _guardians.length, "threshold error");
         PendingGuardianEntry memory pendingEntry;
-        pendingEntry.pendingUntil = block.timestamp + 2 days;
+        pendingEntry.pendingUntil = block.timestamp + 1 minutes;
         pendingEntry.guardians = _guardians;
 
         pendingEntry.guardianHash = _guardianHash;
@@ -272,12 +275,12 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
 
     function batchApproveRecovery(
         address _wallet,
-        address _newOwners,
+        address[] calldata _newOwners,
         uint256 signatureCount,
         bytes memory signatures
     ) external authorized(_wallet) {
         // TODO . clear pending guardian setting
-        //require(_newOwners.length > 0, "owners cannot be empty");
+        require(_newOwners.length > 0, "owners cannot be empty");
         uint256 _nonce = nonce(_wallet);
         // get recoverHash = hash(recoveryRecord) with EIP712
         bytes32 recoveryHash = getSocialRecoveryHash(_wallet, _newOwners, _nonce);
@@ -300,9 +303,9 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         _performRecovery(_wallet, request.newOwners);
     }
 
-    function _performRecovery(address _wallet, address _newOwners) private {
+    function _performRecovery(address _wallet, address[] memory _newOwners) private {
         // check nonce and update nonce
-        //require(_newOwners.length > 0, "owners cannot be empty");
+        require(_newOwners.length > 0, "owners cannot be empty");
         if (recoveryEntries[_wallet].nonce == nonce(_wallet)) {
             walletRecoveryNonce[_wallet]++;
         }
@@ -311,14 +314,7 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
 
         TwoUserMultisig smartAccount = TwoUserMultisig(payable(_wallet));
         // update owners
-        smartAccount.setOwner(_newOwners);
-        // Transaction memory transaction = Transaction({
-        //     to: _wallet,
-        //     value: 0, // Set the appropriate value if the transaction involves sending Ether
-        //     data: abi.encodeWithSignature("setOwner(address)", _newOwners)
-        // });
-        // smartAccount.executeTransactionFromOutside(transaction);
-
+       // smartAccount.setOwner(_newOwners[0],_newOwners[1]);
         // emit RecoverySuccess
         emit SocialRecovery(_wallet, _newOwners);
     }
@@ -329,7 +325,7 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         delete recoveryEntries[_wallet];
     }
 
-    function _pendingRecovery(address _wallet, address _newOwners, uint256 _nonce) private {
+    function _pendingRecovery(address _wallet, address[] calldata _newOwners, uint256 _nonce) private {
         // new pending recovery
         uint256 executeAfter = block.timestamp + 2 days;
         recoveryEntries[_wallet] = RecoveryEntry(_newOwners, executeAfter, _nonce);
@@ -365,7 +361,8 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
 
     /**
      * referece from gnosis safe validation
-     *
+     *  @param signatures Signature data that should be verified.
+     *  Can be packed ECDSA signature ({bytes32 r}{bytes32 s}{uint8 v}), contract signature (EIP-1271) or approved hash.
      */
     function checkNSignatures(address _wallet, bytes32 dataHash, uint256 signatureCount, bytes memory signatures)
         public
@@ -440,8 +437,8 @@ contract SocialRecovery is ISocialRecovery,BaseModule {
         return walletGuardian[_wallet].guardians.isExist(_guardian);
     }
 
-    function approveRecovery(address _wallet, address _newOwners) external authorized(_wallet) {
-       // require(_newOwners.length > 0, "owners cannot be empty");
+    function approveRecovery(address _wallet, address[] calldata _newOwners) external authorized(_wallet) {
+        require(_newOwners.length > 0, "owners cannot be empty");
         if (!isGuardian(_wallet, sender())) {
             revert("not authorized");
         }

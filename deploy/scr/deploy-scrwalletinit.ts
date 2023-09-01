@@ -2,28 +2,29 @@ import { utils, Provider, Wallet,Contract,EIP712Signer,types } from "zksync-web3
 import * as ethers from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { Deployer } from "@matterlabs/hardhat-zksync-deploy";
-import { ZKSYNC_MAIN_ABI } from "zksync-web3/build/src/utils";
 
 export default async function (hre: HardhatRuntimeEnvironment) {
- const provider = new Provider("https://zksync2-testnet.zksync.dev");
-//const provider = new Provider("http://localhost:3050/");
-const wallet = new Wallet("").connect(provider);
-const owner1 = new ethers.Wallet("0x1ab92010c8ded1aef7205517249ab2f214c5816618b2614beb81198611339aba");
-const owner2 = new ethers.Wallet("0x138861f1aad56f1c70f85b20df7aedeb64c9a72aaf4615b816e199157fa9288e");
+ //const provider = new Provider("https://zksync2-testnet.zksync.dev");
+const provider = new Provider("http://localhost:3050/");
+const wallet = new Wallet("0x7726827caac94a7f9e1b160f7ea819f172f7b6f9d2a97f992c38edeab82d4110").connect(provider);
+const owner1 = new ethers.Wallet("0xb5d76d63b2315f53aeddb21c3f1745fc4044ca5be8674812394aa258343d1963");
+const owner2 = new ethers.Wallet("0x07f964f2fe6eff2cbdf8b02c2a3a7777d717d617e975d7ae978d7cb2b611140d");
 const deployer = new Deployer(hre, wallet);
 const accountArtifact = await deployer.loadArtifact("TwoUserMultisig");
-const scrcontract = "0x220B5F88076671fd67CE32f0a46A90c91c913C60";
-const accountContract = "0x3A51482635FdFb2B528f915692156b454f0E4C9F" 
+const scrArtifact = await deployer.loadArtifact("SocialRecovery");
+const scrcontract = "0x6F580854224A6Ec4757ff9c99a8a4Af3882f6E24";
+const accountContract = "0x5C69650D096dCcdEB710FFf34e7E409F5cFaB966" 
 await (
   await deployer.zkWallet.sendTransaction({
     to: accountContract,
-    value: ethers.utils.parseEther("0.01"),
+    value: ethers.utils.parseEther("0.1"),
   })       
 ).wait();
 console.log(deployer.zkWallet.address)
-const account = new ethers.Contract(
-  accountContract,
-  accountArtifact.abi,
+
+const scraccount = new ethers.Contract(
+  scrcontract,
+  scrArtifact.abi,
   wallet
 );
 // const mmadd = "0x4f4A0F99981E9884C9a3FfDeD9C33FF8D088bC30";
@@ -35,7 +36,7 @@ const account = new ethers.Contract(
 // Deploy Socialrecovery
 //  const scrArtifact = await deployer.loadArtifact("SocialRecoveryModule");
 //  const contract = new ethers.Contract(scrcontract, scrArtifact.abi, wallet);
-// const guardianHashValue = "0x5fa82dbdc961b74d16d1c6d50b77ffe075ff664e5952c1106c4fd5642349f538"; // Replace this with the actual value
+// const guardianHashValue = "0x0000000000000000000000000000000000000000000000000000000000000000"; // Replace this with the actual value
 // //0x000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000015fa82dbdc961b74d16d1c6d50b77ffe075ff664e5952c1106c4fd5642349f5380000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a61464658afeaf65cccaafd3a512b69a83b77618
 // // Encode the parameters into bytes
 // const encodedData = ethers.utils.defaultAbiCoder.encode(
@@ -43,8 +44,8 @@ const account = new ethers.Contract(
 //   [["0xa61464658AfeAf65CccaaFD3a512b69A83B77618"], 1, guardianHashValue]
 // );
 // console.log(encodedData)
-
-let aaTx = await account.populateTransaction.addModules([1]);
+const hash ="0x0000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a61464658afeaf65cccaafd3a512b69a83b77618"
+let aaTx = await scraccount.populateTransaction.walletInit(hash);
 aaTx = {
   ...aaTx,
   // deploy a new account using the multisig
@@ -76,5 +77,5 @@ console.log(aaTx)
 const sentTx = await provider.sendTransaction(utils.serialize(aaTx));
 await sentTx.wait();
 
-console.log("addedmodule in account")
+console.log("initscr")
 }
